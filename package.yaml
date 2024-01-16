@@ -1,0 +1,24 @@
+name: 'tp-dcc-maya'
+version: '1.0.0'
+required: True
+author: 'Tomas Poveda'
+authorEmail: 'tpovedatd@gmail.com'
+description: 'Maya package for tp-dcc Tools framework'
+displayName: 'tpDcc Maya'
+environment:
+  PYTHONPATH:
+    - '{self}'
+  TPDCC_BASE_PATHS:
+    - '{self}'
+  TPDCC_META_PATHS:
+    - '{self}/tp/maya/meta/base.py'
+  TPDCC_COMMAND_LIB:
+    - '{self}/tp/maya/api/commands'
+  TPDCC_TOOLS_MANAGER_PATHS:
+    - '{self}/tp/maya/managers/tools.py'
+  TPDCC_CURVES_PATHS:
+    - '{self}/tp/maya/libs/curves/library'
+  TPDCC_TRIGGERS_COMMAND_PATHS:
+    - '{self}/tp/maya/libs/triggers/commands'
+commands:
+  - '{self}/startup/tpmaya.py'
