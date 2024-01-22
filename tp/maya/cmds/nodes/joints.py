@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from typing import Sequence
+
 import maya.cmds as cmds
 
+from tp.core import log
+from tp.maya.cmds import gui
 from tp.maya.cmds.nodes import attributes
+
+logger = log.tpLogger
 
 
 def joint_chains(
@@ -78,3 +84,164 @@ def joint_chains(
         chain.reverse()
 
     return chain_lists, ignore_joints
+
+
+def filter_child_joints(joints: list[str]) -> list[str]:
+    """
+    Retrieve all child joints under the given list of joints in the hierarchy.
+
+    :param list[str] joints: list of joints to get child joints from.
+    :return: list of the given joints with all their child joints (without duplicates).
+    :rtype: list[str]
+    """
+
+    all_joints: list[str] = []
+    for joint in joints:
+        all_joints.append(joint)
+        all_joints.extend(cmds.listRelatives(joint, allDescendents=True, type='joint', fullPath=True) or [])
+
+    return list(set(all_joints))
+
+
+def align_joint_to_parent(joint: str):
+    """
+    Aligns given joint to its parent.
+    Uses orient constraint (while temporally un-parenting children) to re-orient the joint to match parent orientation.
+    Freezes joint transforms before re-parenting children.
+
+    :param str joint: joint to orient to its parent.
+    """
+
+    children = cmds.listRelatives(joint, children=True, fullPath=True)
+    parent = cmds.listRelatives(joint, parent=True, fullPath=True)
+    if children:
+        children = cmds.parent(children, world=True)
+    cmds.delete(cmds.orientConstraint(parent[0], joint, maintainOffset=False))
+    cmds.makeIdentity(joint, apply=True, r=True)
+    if children:
+        cmds.parent(children, joint)
+
+
+def align_joints_to_parent(joints: list[str]):
+    """
+    Aligns given joints to its parent.
+    Uses orient constraint (while temporally un-parenting children) to re-orient the joint to match parent orientation.
+    Freezes joint transforms before re-parenting children.
+
+    :param list[str] joints: list of joints to orient to their parents.
+    """
+
+    [align_joint_to_parent(joint) for joint in joints]
+
+
+def align_selected_joints_to_parent():
+    """
+    Aligns selected joints to its parent.
+    Uses orient constraint (while temporally un-parenting children) to re-orient the joint to match parent orientation.
+    Freezes joint transforms before re-parenting children.
+    """
+
+    selected_joints = cmds.ls(selection=True, exactType='joint', long=True)
+    if not selected_joints:
+        logger.warning('No joints found. Please select some joints.')
+        return
+
+    align_joints_to_parent(selected_joints)
+    cmds.select(selected_joints, replace=True)
+
+    logger.debug('Joints aligned to their parent successfully!')
+
+
+def edit_component_lra(flag: bool = True):
+    """
+    Makes the local rotation axis editable/no editable in component mode.
+
+    :param bool flag: If True, local rotation axis is editable in component mode; if False, disables it and exit to
+        object mode.
+    """
+
+    if flag:
+        cmds.selectMode(component=True)
+        cmds.selectType(localRotationAxis=True)
+        current_panel = gui.panel_under_pointer_or_focus(viewport3d=True, message=False)
+        cmds.modelEditor(current_panel, edit=True, handles=True)
+    else:
+        cmds.selectType(localRotationAxis=False)
+        cmds.selectMode(object=True)
+
+
+def zero_joints_rotation_axis(joints: list[str], zero_children: bool = True):
+    """
+    Zeroes out the joint rotation of given joints.
+
+    :param list[str] joints: list of joints.
+    :param bool zero_children: whether to zero out also rotation axis of child joints.
+    """
+
+    if zero_children:
+        joints = filter_child_joints(joints)
+    for joint in joints:
+        cmds.joint(joint, edit=True, zeroScaleOrient=True)
+
+
+def zero_selected_joints_rotation_axis(zero_children: bool = True):
+    """
+    Zeroes out the joint rotation of selected joints.
+
+    :param bool zero_children: whether to zero out also rotation axis of child joints.
+    """
+
+    selected_joints = cmds.ls(selection=True, exactType='joint', long=True)
+    if not selected_joints:
+        logger.warning('No joints found. Please select some joints.')
+        return
+
+    zero_joints_rotation_axis(selected_joints)
+    cmds.select(selected_joints, replace=True)
+
+    logger.debug('Joints rotations axis zeroed successfully!')
+
+
+def rotate_joint_local_rotation_axis(
+        joint: Sequence[str], rotation: Sequence[float, float, float], include_children: bool = True):
+    """
+    Rotates the local rotation axis of given `joint` by given `rotation`.
+
+    :param str joint: joint to rotate local rotation axis of.
+    :param Sequence[float, float, float] rotation: XYZ rotationa in degrees.
+    :param bool include_children: whether to include joints hierarchy.
+    """
+
+    cmds.rotate(rotation[0], rotation[1], rotation[2], f'{joint}.rotateAxis', objectSpace=True, forceOrderXYZ=True)
+    if cmds.objectType(joint) == 'joint':
+        cmds.joint(joint, edit=True, zeroScaleOrient=True)
+
+
+def rotate_joints_local_rotation_axis(
+        joints: Sequence[str], rotation: Sequence[float, float, float], include_children: bool = True):
+    """
+    Rotates the local rotation axis of given `joints` by given `rotation`.
+
+    :param Sequence[str] joints: joints to rotate local rotation axis of.
+    :param Sequence[float, float, float] rotation: XYZ rotationa in degrees.
+    :param bool include_children: whether to include joints hierarchy.
+    """
+
+    for joint in joints:
+        rotate_joint_local_rotation_axis(joint, rotation, include_children=include_children)
+
+
+def rotate_selected_joints_local_rotation_axis(rotation: Sequence[float, float, float], include_children: bool = True):
+    """
+    Rotates the local rotation axis of current selected joints by given `rotation`.
+
+    :param Sequence[float, float, float] rotation: XYZ rotationa in degrees.
+    :param bool include_children: whether to include joints hierarchy.
+    """
+
+    selected_joints = cmds.ls(selection=True, exactType='joint', long=True)
+    if not selected_joints:
+        logger.warning('No joints found. Please select some joints.')
+        return
+
+    rotate_joints_local_rotation_axis(selected_joints, rotation, include_children=include_children)
