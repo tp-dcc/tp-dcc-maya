@@ -11,13 +11,45 @@ from tp.maya.cmds.nodes import attributes
 logger = log.tpLogger
 
 
+def joints(nodes: list[str], children: bool = True) -> list[str]:
+    """
+    Filters all joints from given list of nodes without duplicates.
+
+    :param list[str] nodes: list of nodes to filter joints from.
+    :param bool children: whether to also return children joints of filtered joints.
+    :return: list of joints.
+    :rtype: list[str]
+    """
+
+    found_joints = cmds.ls(nodes, type='joint', long=True)
+    if children:
+        child_joints = cmds.listRelatives(nodes, children=True, type='joint', fullPath=True, allDescendents=True)
+        if child_joints:
+            found_joints = list(set(found_joints).union(set(child_joints)))
+
+    return found_joints
+
+
+def selected_joints(children: bool = True) -> list[str]:
+    """
+    Returns all selected joints.
+
+    :param bool children: whether to also return children joints of selected joints.
+    :return: list of selected joints.
+    :rtype: list[str]
+    """
+
+    found_joints = cmds.ls(selection=True, long=True)
+    return joints(found_joints, children=children)
+
+
 def joint_chains(
-        joints: list[str], ignore_connected_joints: bool = True,
+        joint_names: list[str], ignore_connected_joints: bool = True,
         filter_type: str = 'joint') -> tuple[list[list[str]], list[str]]:
     """
     Checks the given list of joints for chans and returns a list of chains, each branch being a separated chain.
 
-    :param list[str] joints: list of Maya joint full path names.
+    :param list[str] joint_names: list of Maya joint full path names.
     :param bool ignore_connected_joints: whether to skip any joints with keyframes, connections, constraints or locked
         attributes
     :param str filter_type: type of node to filter by ('transform' or 'joint').
@@ -26,24 +58,24 @@ def joint_chains(
     ..note:: each member of the joint chains must be in the given list of nodes.
     """
 
-    ignore_joints: list[str] = []
+    joints_to_ignore: list[str] = []
     chain_lists: list[list[str]] = []
     end_joints: list[str] = []
     already_recorded_joints: list[str] = []
 
     if ignore_connected_joints:
         joints_to_ignore = attributes.locked_connected_attributes_for_nodes(
-            joints, attributes=attributes.MAYA_TRANSFORM_ATTRS, keyframes=True, constraints=True)[0]
-        if ignore_joints:
-            joints = [x for x in joints if x not in ignore_joints]
+            joint_names, attributes=attributes.MAYA_TRANSFORM_ATTRS, keyframes=True, constraints=True)[0]
+        if joints_to_ignore:
+            joint_names = [x for x in joint_names if x not in joints_to_ignore]
 
     # Retrieve all joints.
-    for joint in joints:
+    for joint in joint_names:
         end = True
         child_joints = cmds.listRelatives(joint, children=True, type=filter_type, fullPath=True)
         if child_joints:
             for child_joint in child_joints:
-                if child_joint in joints:
+                if child_joint in joint_names:
                     end = False
         if not child_joints or end:
             end_joints.append(joint)
@@ -61,7 +93,7 @@ def joint_chains(
 
         # Next chain parent is not in the joints list.
         last_joint_parent = last_joint_parent[0]
-        if last_joint_parent not in joints:
+        if last_joint_parent not in joint_names:
             chain_lists.append(joints_chain)
             continue
 
@@ -73,7 +105,7 @@ def joint_chains(
                 parent_joint = parent_joint[0]
             if not parent_joint:
                 last_joint_parent = None
-            elif parent_joint not in joints or parent_joint in already_recorded_joints:
+            elif parent_joint not in joint_names or parent_joint in already_recorded_joints:
                 last_joint_parent = None
             else:
                 last_joint_parent = parent_joint
@@ -83,20 +115,20 @@ def joint_chains(
     for chain in chain_lists:
         chain.reverse()
 
-    return chain_lists, ignore_joints
+    return chain_lists, joints_to_ignore
 
 
-def filter_child_joints(joints: list[str]) -> list[str]:
+def filter_child_joints(joint_names: list[str]) -> list[str]:
     """
     Retrieve all child joints under the given list of joints in the hierarchy.
 
-    :param list[str] joints: list of joints to get child joints from.
+    :param list[str] joint_names: list of joints to get child joints from.
     :return: list of the given joints with all their child joints (without duplicates).
     :rtype: list[str]
     """
 
     all_joints: list[str] = []
-    for joint in joints:
+    for joint in joint_names:
         all_joints.append(joint)
         all_joints.extend(cmds.listRelatives(joint, allDescendents=True, type='joint', fullPath=True) or [])
 
@@ -122,16 +154,16 @@ def align_joint_to_parent(joint: str):
         cmds.parent(children, joint)
 
 
-def align_joints_to_parent(joints: list[str]):
+def align_joints_to_parent(joint_names: list[str]):
     """
     Aligns given joints to its parent.
     Uses orient constraint (while temporally un-parenting children) to re-orient the joint to match parent orientation.
     Freezes joint transforms before re-parenting children.
 
-    :param list[str] joints: list of joints to orient to their parents.
+    :param list[str] joint_names: list of joints to orient to their parents.
     """
 
-    [align_joint_to_parent(joint) for joint in joints]
+    [align_joint_to_parent(joint) for joint in joint_names]
 
 
 def align_selected_joints_to_parent():
@@ -141,13 +173,13 @@ def align_selected_joints_to_parent():
     Freezes joint transforms before re-parenting children.
     """
 
-    selected_joints = cmds.ls(selection=True, exactType='joint', long=True)
-    if not selected_joints:
+    current_selected_joints = cmds.ls(selection=True, exactType='joint', long=True)
+    if not current_selected_joints:
         logger.warning('No joints found. Please select some joints.')
         return
 
-    align_joints_to_parent(selected_joints)
-    cmds.select(selected_joints, replace=True)
+    align_joints_to_parent(current_selected_joints)
+    cmds.select(current_selected_joints, replace=True)
 
     logger.debug('Joints aligned to their parent successfully!')
 
@@ -170,17 +202,17 @@ def edit_component_lra(flag: bool = True):
         cmds.selectMode(object=True)
 
 
-def zero_joints_rotation_axis(joints: list[str], zero_children: bool = True):
+def zero_joints_rotation_axis(joint_names: list[str], zero_children: bool = True):
     """
     Zeroes out the joint rotation of given joints.
 
-    :param list[str] joints: list of joints.
+    :param list[str] joint_names: list of joints.
     :param bool zero_children: whether to zero out also rotation axis of child joints.
     """
 
     if zero_children:
-        joints = filter_child_joints(joints)
-    for joint in joints:
+        joint_names = filter_child_joints(joint_names)
+    for joint in joint_names:
         cmds.joint(joint, edit=True, zeroScaleOrient=True)
 
 
@@ -191,25 +223,24 @@ def zero_selected_joints_rotation_axis(zero_children: bool = True):
     :param bool zero_children: whether to zero out also rotation axis of child joints.
     """
 
-    selected_joints = cmds.ls(selection=True, exactType='joint', long=True)
-    if not selected_joints:
+    current_selected_joints = cmds.ls(selection=True, exactType='joint', long=True)
+    if not current_selected_joints:
         logger.warning('No joints found. Please select some joints.')
         return
 
-    zero_joints_rotation_axis(selected_joints)
-    cmds.select(selected_joints, replace=True)
+    zero_joints_rotation_axis(current_selected_joints, zero_children=zero_children)
+    cmds.select(current_selected_joints, replace=True)
 
     logger.debug('Joints rotations axis zeroed successfully!')
 
 
 def rotate_joint_local_rotation_axis(
-        joint: Sequence[str], rotation: Sequence[float, float, float], include_children: bool = True):
+        joint: Sequence[str], rotation: Sequence[float, float, float]):
     """
     Rotates the local rotation axis of given `joint` by given `rotation`.
 
     :param str joint: joint to rotate local rotation axis of.
     :param Sequence[float, float, float] rotation: XYZ rotationa in degrees.
-    :param bool include_children: whether to include joints hierarchy.
     """
 
     cmds.rotate(rotation[0], rotation[1], rotation[2], f'{joint}.rotateAxis', objectSpace=True, forceOrderXYZ=True)
@@ -218,30 +249,133 @@ def rotate_joint_local_rotation_axis(
 
 
 def rotate_joints_local_rotation_axis(
-        joints: Sequence[str], rotation: Sequence[float, float, float], include_children: bool = True):
+        joint_names: Sequence[str], rotation: Sequence[float, float, float]):
     """
     Rotates the local rotation axis of given `joints` by given `rotation`.
 
-    :param Sequence[str] joints: joints to rotate local rotation axis of.
+    :param Sequence[str] joint_names: joints to rotate local rotation axis of.
     :param Sequence[float, float, float] rotation: XYZ rotationa in degrees.
-    :param bool include_children: whether to include joints hierarchy.
     """
 
-    for joint in joints:
-        rotate_joint_local_rotation_axis(joint, rotation, include_children=include_children)
+    for joint in joint_names:
+        rotate_joint_local_rotation_axis(joint, rotation)
 
 
 def rotate_selected_joints_local_rotation_axis(rotation: Sequence[float, float, float], include_children: bool = True):
     """
     Rotates the local rotation axis of current selected joints by given `rotation`.
 
-    :param Sequence[float, float, float] rotation: XYZ rotationa in degrees.
+    :param Sequence[float, float, float] rotation: XYZ rotation in degrees.
     :param bool include_children: whether to include joints hierarchy.
     """
 
-    selected_joints = cmds.ls(selection=True, exactType='joint', long=True)
-    if not selected_joints:
+    current_selected_joints = selected_joints(children=include_children)
+    if not current_selected_joints:
         logger.warning('No joints found. Please select some joints.')
         return
 
-    rotate_joints_local_rotation_axis(selected_joints, rotation, include_children=include_children)
+    rotate_joints_local_rotation_axis(current_selected_joints, rotation)
+
+
+def set_joints_draw_style_to_bone(joint_names: list[str]):
+    """
+    Sets given joints draw style to `Bone` (default mode).
+
+    :param list[str] joint_names: list of joints to set draw style of.
+    """
+
+    for joint in joint_names:
+        cmds.setAttr(f'{joint}.drawStyle', 0)
+
+
+def set_selected_joints_draw_style_to_bone(children: bool = True):
+    """
+    Sets selected joints draw style to `Bone` (default mode).
+
+    :param bool children: whether to also change draw style of children joints.
+    """
+
+    current_selected_joints = selected_joints(children=children)
+    if not current_selected_joints:
+        logger.warning('No joints found. Please select some joints.')
+        return
+
+    set_joints_draw_style_to_bone(current_selected_joints)
+
+
+def set_joints_draw_style_to_multi_box(joint_names: list[str]):
+    """
+    Sets given joints draw style to `Multi-Child Box` (default mode).
+
+    :param list[str] joint_names: list of joints to set draw style of.
+    """
+
+    for joint in joint_names:
+        cmds.setAttr(f'{joint}.drawStyle', 1)
+
+
+def set_selected_joints_draw_style_to_multi_box(children: bool = True):
+    """
+    Sets selected joints draw style to `Multi-Child Box` (default mode).
+
+    :param bool children: whether to also change draw style of children joints.
+    """
+
+    current_selected_joints = selected_joints(children=children)
+    if not current_selected_joints:
+        logger.warning('No joints found. Please select some joints.')
+        return
+
+    set_joints_draw_style_to_multi_box(current_selected_joints)
+
+
+def set_joints_draw_style_to_none(joint_names: list[str]):
+    """
+    Sets given joints draw style to `None` (default mode).
+
+    :param list[str] joint_names: list of joints to set draw style of.
+    """
+
+    for joint in joint_names:
+        cmds.setAttr(f'{joint}.drawStyle', 2)
+
+
+def set_selected_joints_draw_style_to_none(children: bool = True):
+    """
+    Sets selected joints draw style to `None` (default mode).
+
+    :param bool children: whether to also change draw style of children joints.
+    """
+
+    current_selected_joints = selected_joints(children=children)
+    if not current_selected_joints:
+        logger.warning('No joints found. Please select some joints.')
+        return
+
+    set_joints_draw_style_to_none(current_selected_joints)
+
+
+def set_joints_draw_style_to_joint(joint_names: list[str]):
+    """
+    Sets given joints draw style to `Joint` (default mode).
+
+    :param list[str] joint_names: list of joints to set draw style of.
+    """
+
+    for joint in joint_names:
+        cmds.setAttr(f'{joint}.drawStyle', 3)
+
+
+def set_selected_joints_draw_style_to_joint(children: bool = True):
+    """
+    Sets selected joints draw style to `Joint` (default mode).
+
+    :param bool children: whether to also change draw style of children joints.
+    """
+
+    current_selected_joints = selected_joints(children=children)
+    if not current_selected_joints:
+        logger.warning('No joints found. Please select some joints.')
+        return
+
+    set_joints_draw_style_to_joint(current_selected_joints)
