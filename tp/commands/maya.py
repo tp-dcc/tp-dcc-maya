@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import typing
+
 from tp.maya import api
 
-from tp.core import dcc, command
+from tp.core import command
+
+if typing.TYPE_CHECKING:
+    from tp.maya.meta.planeorient import PlaneOrientMeta
 
 
 def orient_nodes(
@@ -19,3 +24,27 @@ def orient_nodes(
     """
 
     return command.execute('tp.maya.nodes.orient', **locals())
+
+
+def create_plane_orient() -> PlaneOrientMeta:
+    """
+    Creates a new plane orient meta node instance.
+
+    :return: newly created plane orient meta node instance.
+    :rtype: PlaneOrientMeta
+    """
+
+    return command.execute('tp.maya.planeOrient.create')
+
+
+def plane_orient_align(meta_node: PlaneOrientMeta, skip_end: bool = False) -> bool:
+    """
+    Aligns the given plane orient meta node to the closest plane which is attached to the given meta node.
+
+    :param PlaneOrientMeta meta_node: optional plane orient meta node instance to align.
+    :param bool skip_end: whether to skip the orient of the last joint in the chain.
+    :return: True if plane orient was oriented successfully; False otherwise.
+    :rtype: bool
+    """
+
+    return command.execute('tp.maya.planeOrient.orient', **locals())

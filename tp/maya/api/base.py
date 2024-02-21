@@ -357,6 +357,13 @@ class DGNode:
 
         return self.fullPathName()
 
+    def __bool__(self):
+        """
+         Overrides __bool__ function to return the False if the object does not exists.
+         """
+
+        return self.exists()
+
     def __getitem__(self, item):
         """
         Overrides __getitem__ function to attempt to retrieve the MPlug for this node.
@@ -2466,7 +2473,7 @@ class Plug:
         source = self._mplug.source()
         return Plug(node_by_object(source.node()), source) if not source.isNull else None
 
-    def sourceNode(self) -> DGNode | None:
+    def sourceNode(self) -> DGNode | DagNode | None:
         """
         Returns the source node from this plug or None if it is not connected to any node.
 

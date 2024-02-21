@@ -255,23 +255,26 @@ def match_curves(driver, targets, space=None):
 
 
 def create_curve_shape(
-        curve_data, parent=None, space=None, curve_size=1.0, translate_offset=(0.0, 0.0, 0.0),
-        scale_offset=(1.0, 1.0, 1.0), axis_order='XYZ', color=None, mirror=None):
+        curve_data: dict, parent: OpenMaya.MObject | None = None, space: int | None =None, curve_size: float = 1.0,
+        translate_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        scale_offset: tuple[float, float, float] = (1.0, 1.0, 1.0), axis_order: str = 'XYZ',
+        color: tuple[float, float, float] | None = None,
+        mirror: bool | None = None) -> tuple[OpenMaya.MObject, list[OpenMaya.MObject]]:
     """
     Creates a NURBS curve based on the given curve data.
 
     :param dict curve_data: data, {"shapeName": {"cvs": [], "knots":[], "degree": int, "form": int, "matrix": []}}
     :param str or OpenMaya.MObject parent: transform that takes ownership of the curve shapes. If not parent is given a new
         transform will be created
-    :param OpenMaya.MSpace space: coordinate space to set the point data
+    :param int space: coordinate space to set the point data
     :param float curve_size: global curve size offset.
-    :param tuple(float) translate_offset: translate offset for the curve.
-    :param tuple(float) scale_offset: scale offset for the curve.
+    :param tuple[float, float, float] translate_offset: translate offset for the curve.
+    :param tuple[float, float, float] scale_offset: scale offset for the curve.
     :param str axis_order: axis order for the curve.
-    :param tuple(float) color: curve color.
-    :param bool mirror: whether curve should be mirrored.
+    :param tuple[float, float, float] or None color: curve color.
+    :param bool or None mirror: whether curve should be mirrored.
     :return: tuple containing the parent MObject and the list of MObject shapes
-    :rtype: tuple(MObject, list(MObject)),
+    :rtype: tuple[OpenMaya.MObject, list[OpenMaya.MObject]]
     """
 
     parent_inverse_matrix = OpenMaya.MMatrix()

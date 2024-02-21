@@ -30,6 +30,26 @@ def reset_transform_attributes(
 		cmds.setAttr(f'{node_name}.visibility', 1.0)
 
 
+def transform_is_zeroed(node_name: str) -> bool:
+	"""
+	Returns whether the `translate` and `rotate` attributes are zeroed out and `scale` values are set to 1.0.
+
+	:param str node_name: Maya transform name to check.
+	:return: True if `translate` and `rotate` attributes are zeroed out and `scale` values are set to 1.0.
+	:rtype: bool
+	"""
+
+	zeroed = True
+	if cmds.getAttr(f'{node_name}.translate')[0] != (0.0, 0.0, 0.0):
+		zeroed = False
+	if cmds.getAttr(f'{node_name}.rotate')[0] != (0.0, 0.0, 0.0):
+		zeroed = False
+	if cmds.getAttr(f'{node_name}.scale')[0] != (1.0, 1.0, 1.0):
+		zeroed = False
+
+	return zeroed
+
+
 def locked_connected_attributes(
 		node: str, attributes: list[str] | None = None, keyframes: bool = False,
 		constraints: bool = False) -> list[str]:
@@ -89,3 +109,64 @@ def locked_connected_attributes_for_nodes(
 			locked_attributes.extend(locked_connected_attrs)
 
 	return locked_nodes, locked_attributes
+
+
+def disconnect_attribute(node_name: str, attribute_name: str) -> bool:
+	"""
+	Disconnects attribute that belongs to given node.
+
+	:param str node_name: Maya node name.
+	:param str attribute_name: attribute name to disconnect.
+	:return: True if attribute was disconnected successfully; False otherwise.
+	:rtype: bool
+	"""
+
+	node_attribute = f'{node_name}.{attribute_name}'
+	connected_attributes = cmds.listConnections(node_attribute, plugs=True)
+	if not connected_attributes:
+		return False
+
+	try:
+		cmds.disconnectAttr(connected_attributes[0], node_attribute)
+		return True
+	except RuntimeError:
+		pass
+
+	return False
+
+
+def unlock_disconnect_attributes(node_name: str, attribute_names: list[str]):
+	"""
+	Unlocks/Delete keys/Disconnects all given attributes from given node.
+
+	:param str node_name: Maya node name.
+	:param list[str] attribute_names: attribute names to disconnect.
+	"""
+
+	for attribute_name in attribute_names:
+		cmds.setAttr(f'{node_name}.{attribute_name}', lock=False)
+		remove_attribute_keys(node_name, attribute_name)
+		disconnect_attribute(node_name, attribute_name)
+
+
+def unlock_disconnect_transform(node_name: str):
+	"""
+	Unlocks/Deletes keys/Disconnects `translate`, `rotate` and `scale` attributes.
+
+	:param str node_name: Maya node name to unlock and disconnect attributes of.
+	"""
+
+	unlock_disconnect_attributes(node_name, MAYA_TRANSFORM_ATTRS)
+
+
+def remove_attribute_keys(node_name: str, attribute_name: str, time_range: tuple[int, int] = (-10000, 10000)):
+	"""
+	Deletes all the keys on an attribute within the range.
+
+	:param str node_name: Maya node name.
+	:param str attribute_name: Maya attribute name.
+	:param tuple[int, int] time_range: time range.
+	"""
+
+	if cmds.keyframe(node_name, attribute=attribute_name, selected=False, query=True):
+		cmds.cutKey(node_name, time=time_range, attribute=attribute_name)

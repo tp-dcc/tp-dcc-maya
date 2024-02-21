@@ -379,3 +379,156 @@ def set_selected_joints_draw_style_to_joint(children: bool = True):
         return
 
     set_joints_draw_style_to_joint(current_selected_joints)
+
+
+def set_joints_local_rotation_axis_display(joint_names: list[str], display: bool, children: bool = True):
+    """
+    Shows/Hides local rotation axis of selected joints.
+
+    :param list[str] joint_names: list of joints to set local rotation axis visibility of.
+    :param bool display: whether to show/hide selected joints.
+    :param bool children: whether to also set local rotation visibility of children joints.
+    """
+
+    if not joint_names:
+        logger.warning('No joints given.')
+        return
+    if children:
+        joint_names = filter_child_joints(joint_names)
+    for joint in joint_names:
+        cmds.setAttr(f'{joint}.displayLocalAxis', display)
+    logger.debug(f'Joints local rotation axis visibility set to "{display}"')
+
+
+def set_selected_joints_local_rotation_axis_display(display: bool, children: bool = True):
+    """
+    Shows/Hides local rotation axis of selected joints.
+
+    :param bool display: whether to show/hide selected joints.
+    :param bool children: whether to also set local rotation visibility of children joints.
+    """
+
+    current_selected_joints = cmds.ls(selection=True, long=True, exactType='joint')
+    set_joints_local_rotation_axis_display(current_selected_joints, display, children=children)
+
+    # Make sure handles are visible in current view panel.
+    current_panel = gui.panel_under_pointer_or_focus(viewport3d=True, message=False)
+    cmds.modelEditor(current_panel, edit=True, handles=True)
+
+
+def mirror_joint(joint_name: str, axis: str, search_replace: tuple[list[str]] = (['_L', '_R'], ['_lft', '_rgt']),
+                 mirror_behavior: bool = True) -> list[str]:
+    """
+    Mirror given joint along given axis.
+
+    :param str joint_name: name of the Maya joint to mirror.
+    :param str axis: axis to mirror across ('X', 'Y' or 'Z').
+    :param tuple[list[str]] search_replace: tuple with list of names to search and replace mirror joint names with.
+    :param bool mirror_behavior: whether to mirror joint with a mirror behavior.
+    :return: list of mirrored joints.
+    :rtype: list[str]
+    """
+
+    joints_to_mirror = [joint_name]
+    joints_to_mirror.extend(cmds.listRelatives(joint_name, allDescendents=True, type='joint') or [])
+
+    search_list: list[str, str] = ['', '']
+    for mirror_map in search_replace:
+        for joint_to_mirror in joints_to_mirror:
+            if mirror_map[0] in joint_name:
+                search_list = mirror_map
+                break
+            elif mirror_map[1] in joint_name:
+                mirror_map.reverse()
+                search_list = mirror_map
+                break
+
+    axis = axis.lower()
+    if axis == 'x':
+        mirrored_joints = cmds.mirrorJoint(
+            joint_name, mirrorYZ=True, mirrorBehavior=mirror_behavior, searchReplace=search_list)
+    elif axis == 'y':
+        mirrored_joints = cmds.mirrorJoint(
+            joint_name, mirrorXZ=True, mirrorBehavior=mirror_behavior, searchReplace=search_list)
+    else:
+        mirrored_joints = cmds.mirrorJoint(
+            joint_name, mirrorXY=True, mirrorBehavior=mirror_behavior, searchReplace=search_list)
+
+    return mirrored_joints
+
+
+def mirror_joints(joint_names: list[str], axis: str,
+                  search_replace: tuple[list[str]] = (['_L', '_R'], ['_lft', '_rgt']),
+                  mirror_behavior: bool = True) -> list[str]:
+    """
+    Mirror given joints along give axis.
+
+    :param list[str] joint_names: name of the Maya joints to mirror.
+    :param str axis: axis to mirror across ('X', 'Y' or 'Z').
+    :param tuple[list[str]] search_replace: tuple with list of names to search and replace mirror joint names with.
+    :param bool mirror_behavior: whether to mirror joint with a mirror behavior.
+    :return: list of mirrored joints.
+    :rtype: list[str]
+    """
+
+    mirrored_joints: list[str] = []
+    for joint_name in joint_names:
+        mirrored_joints.extend(
+            mirror_joint(joint_name, axis, search_replace=search_replace, mirror_behavior=mirror_behavior))
+
+    return mirrored_joints
+
+
+def mirror_selected_joints(
+        axis: str, search_replace: tuple[list[str]] = (['_L', '_R'], ['_lft', '_rgt']),
+        mirror_behavior: bool = True) -> list[str]:
+    """
+    Mirrors selected joints along give axis.
+
+    :param str axis: axis to mirror across ('X', 'Y' or 'Z').
+    :param tuple[list[str]] search_replace: tuple with list of names to search and replace mirror joint names with.
+    :param bool mirror_behavior: whether to mirror joint with a mirror behavior.
+    :return: list of mirrored joints.
+    :rtype: list[str]
+    """
+
+    current_selected_joints = cmds.ls(sl=True, type='joint', long=True)
+    if not current_selected_joints:
+        logger.warning('No joints found. Please select some joints.')
+        return []
+
+    return mirror_joints(current_selected_joints, axis, search_replace=search_replace, mirror_behavior=mirror_behavior)
+
+
+def selected_joints_scale_compensate(compensate: bool = True, children: bool = False):
+    """
+    Turns the segment scale compensate on or off for the selected joints.
+
+    :param bool compensate: True to enable scale compensate; False to disable it.
+    :param bool children: whether to affect children.
+    """
+
+    current_selected_joints = selected_joints(children=children)
+    if not current_selected_joints:
+        logger.warning('No joints found. Please select some joints.')
+        return []
+
+    for joint_name in current_selected_joints:
+        cmds.setAttr(f'{joint_name}.segmentScaleCompensate', compensate)
+
+
+def set_selected_joints_radius(radius: float, children: bool = False):
+    """
+    Sets the joint radius for selected joints.
+
+    :param float radius: joint radius.
+    :param bool children: whether to include all child joints while adjusting the radius.
+    """
+
+    current_selected_joints = selected_joints(children=children)
+    if not current_selected_joints:
+        logger.warning('No joints found. Please select some joints.')
+        return []
+
+    for joint_name in current_selected_joints:
+        cmds.setAttr(f'{joint_name}.radius', radius)
